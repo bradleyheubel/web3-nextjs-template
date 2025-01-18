@@ -20,6 +20,7 @@ import {
 } from 'wagmi';
 import { useEffect } from 'react';
 import { Label } from '@/components/ui/label';
+import useIsAuth from '@/lib/hooks/useIsAuth';
 
 const formSchema = z.object({
   to: z.string().refine((value) => isAddress(value), {
@@ -36,6 +37,7 @@ export default function SendTransactionForm() {
     useWaitForTransactionReceipt({
       hash
     });
+  const { isAuth } = useIsAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -62,6 +64,16 @@ export default function SendTransactionForm() {
 
   function onSubmit({ to, value }: z.infer<typeof formSchema>) {
     sendTransaction({ to: to as `0x${string}`, value: parseEther(value) });
+  }
+
+  if (!isAuth) {
+    return (
+      <div className="flex flex-col items-center justify-center space-y-4">
+        <p className="text-center text-gray-500">
+          Please authenticate to send transactions
+        </p>
+      </div>
+    );
   }
 
   return (

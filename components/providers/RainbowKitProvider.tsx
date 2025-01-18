@@ -1,12 +1,12 @@
 'use client';
 
 import '@rainbow-me/rainbowkit/styles.css';
-import { State, WagmiProvider } from 'wagmi';
+import { State, WagmiProvider, useDisconnect, useAccount } from 'wagmi';
 import {
   RainbowKitProvider as NextRainbowKitProvider,
   RainbowKitAuthenticationProvider
 } from '@rainbow-me/rainbowkit';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import ReactQueryProvider from './ReactQueryProvider';
 import wagmiConfig from '@/lib/config/wagmi';
 import { authenticationAdapter } from '@/lib/utils/authenticationAdapter';
@@ -15,6 +15,28 @@ import { isAuthAction } from '@/lib/actions/auth';
 import { Optional } from '@/lib/types/common';
 import { eventEmitter } from '@/lib/config/clients/eventEmitter';
 import { EMITTER_EVENTS } from '@/lib/constants';
+
+function WalletWatcher() {
+  const { isConnected } = useAccount();
+  
+  useEffect(() => {
+    if (!isConnected) {
+      authenticationAdapter.signOut();
+    }
+  }, [isConnected]);
+
+  // Check auth status when wallet is connected
+  useAsyncEffect(async () => {
+    if (isConnected) {
+      const { isAuth } = await isAuthAction();
+      if (isAuth) {
+        eventEmitter.emit(EMITTER_EVENTS.SIGN_IN);
+      }
+    }
+  }, [isConnected]);
+
+  return null;
+}
 
 type RainbowKitProviderProps = {
   children: ReactNode;
@@ -30,16 +52,18 @@ export default function RainbowKitProvider({
 
   useAsyncEffect(async () => {
     const { isAuth } = await isAuthAction();
-
     setIsAuth(isAuth);
     setIsLoading(false);
 
-    eventEmitter.on(EMITTER_EVENTS.SIGN_IN, () => setIsAuth(true));
+    const handleSignIn = () => setIsAuth(true);
+    const handleSignOut = () => setIsAuth(false);
 
-    eventEmitter.on(EMITTER_EVENTS.SIGN_OUT, () => setIsAuth(false));
+    eventEmitter.on(EMITTER_EVENTS.SIGN_IN, handleSignIn);
+    eventEmitter.on(EMITTER_EVENTS.SIGN_OUT, handleSignOut);
 
     return () => {
-      eventEmitter.removeListener(EMITTER_EVENTS.SIGN_IN);
+      eventEmitter.off(EMITTER_EVENTS.SIGN_IN, handleSignIn);
+      eventEmitter.off(EMITTER_EVENTS.SIGN_OUT, handleSignOut);
     };
   }, []);
 
@@ -56,7 +80,10 @@ export default function RainbowKitProvider({
           adapter={authenticationAdapter}
           status={status}
         >
-          <NextRainbowKitProvider coolMode>{children}</NextRainbowKitProvider>
+          <NextRainbowKitProvider coolMode>
+            <WalletWatcher />
+            {children}
+          </NextRainbowKitProvider>
         </RainbowKitAuthenticationProvider>
       </ReactQueryProvider>
     </WagmiProvider>
